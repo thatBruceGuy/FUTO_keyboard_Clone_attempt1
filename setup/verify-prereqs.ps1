@@ -8,10 +8,24 @@
     Output:  a PASS/WARN/FAIL table, then a summary and a fix list.
 #>
 
+param(
+    # Skip the "press Enter" pause. Use when running inside a window you control.
+    [switch]$NoPause
+)
+
 $ErrorActionPreference = 'Continue'
 $ProgressPreference    = 'SilentlyContinue'
 $results = @()
 $fixes   = @()
+$out     = New-Object System.Collections.Generic.List[string]
+
+# Every line goes to the console AND to $out, so a report file can be written
+# even when the console window closes the instant the script ends.
+function Say {
+    param([string]$Text = '', $Color)
+    $script:out.Add($Text)
+    if ($Color) { Write-Host $Text -ForegroundColor $Color } else { Write-Host $Text }
+}
 
 function Add-Result {
     param($Step, $Check, $Status, $Detail, $Fix)
@@ -29,10 +43,10 @@ function Get-GitConfig($key) {
     return ($v | Select-Object -First 1)
 }
 
-Write-Host ""
-Write-Host "FUTO Keyboard fork - prerequisite verification" -ForegroundColor Cyan
-Write-Host "Run at $(Get-Date -Format 'yyyy-MM-dd HH:mm') on $env:COMPUTERNAME" -ForegroundColor DarkGray
-Write-Host ""
+Say ''
+Say 'FUTO Keyboard fork - prerequisite verification' Cyan
+Say "Run at $(Get-Date -Format 'yyyy-MM-dd HH:mm') on $env:COMPUTERNAME" DarkGray
+Say ''
 
 # ---------------------------------------------------------------- Step 1: Git
 $git = Get-Cmd git
@@ -295,25 +309,55 @@ try {
 }
 
 # ------------------------------------------------------------------- Report
-$results | Format-Table -AutoSize -Property Step, Check, Status, Detail | Out-String -Width 200 | Write-Host
+$table = $results |
+    Format-Table -AutoSize -Property Step, Check, Status, Detail |
+    Out-String -Width 200
+foreach ($line in ($table -split "`r?`n")) { Say $line }
 
 $fail = @($results | Where-Object Status -eq 'FAIL').Count
 $warn = @($results | Where-Object Status -eq 'WARN').Count
 $pass = @($results | Where-Object Status -eq 'PASS').Count
 
-Write-Host ("PASS {0}    WARN {1}    FAIL {2}" -f $pass, $warn, $fail) -ForegroundColor Cyan
-Write-Host ""
+Say ("PASS {0}    WARN {1}    FAIL {2}" -f $pass, $warn, $fail) Cyan
+Say ''
 
 if ($fixes.Count -gt 0) {
-    Write-Host "Fixes:" -ForegroundColor Yellow
-    $fixes | ForEach-Object { Write-Host "  $_" }
-    Write-Host ""
+    Say 'Fixes:' Yellow
+    foreach ($f in $fixes) { Say "  $f" }
+    Say ''
 }
 
 if ($fail -eq 0) {
-    Write-Host "All five prerequisite steps are satisfied. Next: run setup\bootstrap.ps1 to clone the source." -ForegroundColor Green
+    Say 'All five prerequisite steps are satisfied. Next: run setup\bootstrap.ps1 to clone the source.' Green
 } else {
-    Write-Host "$fail check(s) failed. Fix those, then rerun this script." -ForegroundColor Red
+    Say "$fail check(s) failed. Fix those, then rerun this script." Red
+}
+Say ''
+
+# Write the report somewhere the user can still read it after the window closes.
+$reportPath = $null
+foreach ($dir in @([Environment]::GetFolderPath('Desktop'), $env:USERPROFILE, $env:TEMP, (Get-Location).Path)) {
+    if ([string]::IsNullOrWhiteSpace($dir)) { continue }
+    try {
+        $candidate = Join-Path $dir 'futo-prereq-report.txt'
+        $out -join [Environment]::NewLine | Out-File -FilePath $candidate -Encoding utf8 -ErrorAction Stop
+        $reportPath = $candidate
+        break
+    } catch { continue }
+}
+if ($reportPath) {
+    Write-Host "Report saved to: $reportPath" -ForegroundColor Cyan
+    Write-Host 'Open that file and paste its contents back to Claude.' -ForegroundColor Cyan
+} else {
+    Write-Host 'Could not write a report file; copy the table above manually.' -ForegroundColor Yellow
+}
+Write-Host ''
+
+# A window spawned by double-clicking or by "powershell -File" closes the moment
+# this script ends, taking the table with it. Hold it open unless told not to.
+if (-not $NoPause) {
+    Write-Host 'Press Enter to close this window...' -ForegroundColor DarkGray
+    try { [void](Read-Host) } catch { Start-Sleep -Seconds 30 }
 }
 
 exit $fail
