@@ -37,6 +37,26 @@ function Add-Result {
 
 function Get-Cmd($name) { Get-Command $name -ErrorAction SilentlyContinue }
 
+# This project pins Gradle 8.14.3 and Android Gradle Plugin 8.10.1.
+# Gradle 8.14.3 runs fine on JDK 21 but dies on JDK 25 with
+# "Unsupported class file major version 69" as soon as a real task runs.
+# 'java -version' alone succeeds on 25, so version must be graded explicitly.
+function Get-JdkVerdict {
+    param([string]$VersionText)
+    $m = [regex]::Match([string]$VersionText, '"?(\d+)[."]')
+    if (-not $m.Success) { return @{ Status = 'WARN'; Note = 'version not recognised'; Major = 0 } }
+    $major = [int]$m.Groups[1].Value
+    if ($major -lt 17) {
+        return @{ Status = 'FAIL'; Note = "JDK $major is below the minimum 17 required by AGP 8.10"; Major = $major }
+    } elseif ($major -le 21) {
+        return @{ Status = 'PASS'; Note = "JDK $major"; Major = $major }
+    } elseif ($major -le 24) {
+        return @{ Status = 'WARN'; Note = "JDK $major is newer than AGP 8.10 is tested against; prefer 17 or 21"; Major = $major }
+    } else {
+        return @{ Status = 'FAIL'; Note = "JDK $major cannot run Gradle 8.14.3 (Unsupported class file major version)"; Major = $major }
+    }
+}
+
 function Get-GitConfig($key) {
     $v = & git config --get $key 2>$null
     if ($LASTEXITCODE -ne 0) { return $null }
@@ -161,7 +181,13 @@ if ($studioDir) {
     $jbr = Join-Path $studioDir 'jbr\bin\java.exe'
     if (Test-Path $jbr) {
         $jv = (& $jbr -version 2>&1) | Select-Object -First 1
-        Add-Result 4 'Bundled JDK (jbr)' 'PASS' "$jv"
+        $v  = Get-JdkVerdict $jv
+        if ($v.Status -eq 'PASS') {
+            Add-Result 4 'Bundled JDK (jbr) usable for this build' 'PASS' "$jv"
+        } else {
+            Add-Result 4 'Bundled JDK (jbr) usable for this build' $v.Status "$jv - $($v.Note)" `
+                'Install Temurin JDK 21 from https://adoptium.net and use it instead of the bundled jbr. In Android Studio set File > Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK to 21.'
+        }
     } else {
         Add-Result 4 'Bundled JDK (jbr)' 'WARN' 'jbr not found under the Studio directory' `
             'Builds from a terminal need JAVA_HOME pointing at a JDK 17+'
@@ -174,21 +200,16 @@ if ($studioDir) {
 # Terminal builds use JAVA_HOME, which is separate from Studio's bundled JDK.
 if ($env:JAVA_HOME -and (Test-Path (Join-Path $env:JAVA_HOME 'bin\java.exe'))) {
     $jhv = (& (Join-Path $env:JAVA_HOME 'bin\java.exe') -version 2>&1) | Select-Object -First 1
-    $mj  = [regex]::Match([string]$jhv, '"(\d+)')
-    if ($mj.Success -and [int]$mj.Groups[1].Value -ge 17) {
+    $v   = Get-JdkVerdict $jhv
+    if ($v.Status -eq 'PASS') {
         Add-Result 4 'JAVA_HOME (terminal builds)' 'PASS' "$jhv"
     } else {
-        $jhFix2 = if ($studioDir) { "Point JAVA_HOME at $studioDir\jbr" }
-                  else { 'Point JAVA_HOME at a JDK 17 or newer' }
-        Add-Result 4 'JAVA_HOME (terminal builds)' 'WARN' "$jhv is older than 17" $jhFix2
+        Add-Result 4 'JAVA_HOME (terminal builds)' $v.Status "$jhv - $($v.Note)" `
+            'Set JAVA_HOME to a JDK 21, for example C:\Program Files\Eclipse Adoptium\jdk-21'
     }
 } else {
-    $jhFix = if ($studioDir) {
-        "Set JAVA_HOME to $studioDir\jbr (only needed for gradlew from a terminal)"
-    } else {
-        'Install Android Studio, then set JAVA_HOME to its jbr directory (only needed for gradlew from a terminal)'
-    }
-    Add-Result 4 'JAVA_HOME (terminal builds)' 'WARN' 'not set or invalid' $jhFix
+    Add-Result 4 'JAVA_HOME (terminal builds)' 'WARN' 'not set or invalid' `
+        'Needed only for gradlew from a terminal. Install Temurin JDK 21 from https://adoptium.net and set JAVA_HOME to it. Do not use Android Studio jbr if it is JDK 25.'
 }
 
 # ------------------------------------------- Step 5: SDK, NDK, CMake, tools

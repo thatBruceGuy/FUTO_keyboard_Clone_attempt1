@@ -22,9 +22,21 @@ Install these in order. Versions are the ones the upstream build file pins.
 | 8 | CMake | 3.22.1 or newer | SDK Manager > SDK Tools | Builds the whisper.cpp, GGML, MOZC and RIME native code. |
 | 9 | Android SDK Platform-Tools | latest | SDK Manager > SDK Tools | Gives you `adb` for installing on your phone. |
 
+| 10 | Temurin JDK 21 (LTS) | 21 | https://adoptium.net | See the JDK note below. Do not rely on the JDK bundled with Android Studio. |
+
 Gradle 8.14.3 and Kotlin 2.1.0 are fetched automatically by the wrapper. No manual download.
-JDK: Android Studio bundles JetBrains Runtime 21, which works. If you build from a terminal, set `JAVA_HOME` to that JDK
-(usually `C:\Program Files\Android\Android Studio\jbr`).
+
+### JDK note, important
+
+This project pins Gradle 8.14.3 and Android Gradle Plugin 8.10.1. That combination requires JDK 17 or 21.
+It fails on JDK 25 with `Unsupported class file major version 69` as soon as a real task runs. Confusingly,
+`java -version` and `gradle --version` both succeed on JDK 25, so the problem only appears once you build.
+
+Recent Android Studio releases bundle JDK 25 as their JetBrains Runtime, so the bundled JDK is not usable here.
+Install Temurin JDK 21 and:
+
+- For terminal builds, set `JAVA_HOME` to the Temurin 21 directory.
+- In Android Studio, set File > Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK to 21.
 
 Disk: budget about 15 GB. The SDK and NDK are around 6 GB, the source with submodules about 2 GB, and the native build output several GB more.
 

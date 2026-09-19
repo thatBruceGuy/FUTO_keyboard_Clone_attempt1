@@ -42,8 +42,8 @@ Do not begin editing code until every row passes.
 | 2 | Git long paths | `git config --get core.longpaths` | `true` |
 | 3 | Git LFS | `git lfs version` | Prints a version |
 | 4 | Python on PATH | `python --version` | Prints 3.10 or newer and does not open the Microsoft Store |
-| 5 | JDK | `java -version` | Prints 17 or newer |
-| 6 | JAVA_HOME | `echo $env:JAVA_HOME` | Points at a JDK directory containing `bin\java.exe` |
+| 5 | JDK version | `java -version` | Reports 17 or 21. JDK 25 FAILS this build, see note below |
+| 6 | JAVA_HOME | `echo $env:JAVA_HOME` | Points at a JDK 21 containing `bin\java.exe`, not the Android Studio jbr |
 | 7 | Android SDK location | `Get-Content local.properties` | `sdk.dir` points at an existing directory |
 | 8 | SDK Platform 35 | `Test-Path "$sdk\platforms\android-35"` | `True` |
 | 9 | Build-Tools 35 | `Get-ChildItem "$sdk\build-tools"` | A `35.*` directory exists |
@@ -64,6 +64,12 @@ Do not begin editing code until every row passes.
 | 24 | Baseline install | `adb install -r <apk>` | `Success`, and the keyboard can be enabled under Android Settings > Languages and input |
 
 Where `$sdk` is the value of `sdk.dir` from `local.properties`.
+
+The JDK rows matter more than they look. This project pins Gradle 8.14.3 and Android Gradle Plugin
+8.10.1, which run on JDK 17 or 21 and fail on JDK 25 with `Unsupported class file major version 69`.
+Both `java -version` and `gradle --version` succeed on JDK 25, so the failure surfaces only during a
+real build. Recent Android Studio releases bundle JDK 25, so do not point `JAVA_HOME` at the bundled
+jbr. Use a Temurin JDK 21.
 
 Check 23 is the slow one. On the first run expect 20 to 60 minutes while the native whisper.cpp,
 GGML, MOZC and RIME code compiles. Do not assume it hung until 60 minutes have passed with no output.
