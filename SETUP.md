@@ -28,6 +28,18 @@ JDK: Android Studio bundles JetBrains Runtime 21, which works. If you build from
 
 Disk: budget about 15 GB. The SDK and NDK are around 6 GB, the source with submodules about 2 GB, and the native build output several GB more.
 
+## 1b. Verify the prerequisites
+
+After installing the items above, confirm all five steps landed correctly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup\verify-prereqs.ps1
+```
+
+It checks every item in the table plus the git settings below, prints a PASS/WARN/FAIL table
+with a fix for each problem, and exits with the number of failures. It installs nothing and
+changes nothing. A WARN is advisory; a FAIL blocks the build.
+
 ## 2. One-time Windows settings
 
 Run in an elevated PowerShell:
