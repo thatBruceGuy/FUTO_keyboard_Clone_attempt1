@@ -329,6 +329,20 @@ try {
     Add-Result 'extra' "Free disk on ${driveLetter}:" 'WARN' 'could not read the drive'
 }
 
+# ------------------------------------------- Reconcile the two JDK checks
+# Builds need one usable JDK, not two. When JAVA_HOME already points at a
+# good JDK, an unusable bundled jbr only matters inside Android Studio, which
+# is fixed by a setting rather than an install. Downgrade it so it no longer
+# blocks the clone after JDK 21 is installed.
+$jhRow  = $results | Where-Object { $_.Check -eq 'JAVA_HOME (terminal builds)' } | Select-Object -First 1
+$jbrRow = $results | Where-Object { $_.Check -eq 'Bundled JDK (jbr) usable for this build' } | Select-Object -First 1
+if ($jhRow -and $jbrRow -and $jhRow.Status -eq 'PASS' -and $jbrRow.Status -eq 'FAIL') {
+    $jbrRow.Status = 'WARN'
+    $jbrRow.Detail = "$($jbrRow.Detail); terminal builds use JAVA_HOME instead"
+    $fixes = @($fixes | Where-Object { $_ -notlike '`[4`] Bundled JDK (jbr) usable*' })
+    $fixes += '[4] Bundled JDK (jbr) -> Only for builds inside Android Studio: File > Settings > Build, Execution, Deployment > Build Tools > Gradle > Gradle JDK, choose JAVA_HOME or the Temurin 21 entry'
+}
+
 # ------------------------------------------------------------------- Report
 $table = $results |
     Format-Table -AutoSize -Property Step, Check, Status, Detail |
